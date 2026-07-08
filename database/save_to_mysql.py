@@ -118,11 +118,11 @@ def save_csv_to_mysql(csv_path="data/raw/master_raw_data.csv"):
     df["kualifikasi"] = df["kualifikasi"].apply(lambda x: clean_text(x, 1000))
 
     conn = pymysql.connect(
-        host=os.getenv("MYSQLHOST", "localhost"),
-        port=int(os.getenv("MYSQLPORT", "3306")),
-        user=os.getenv("MYSQLUSER", "root"),
-        password=os.getenv("MYSQLPASSWORD", ""),
-        database=os.getenv("MYSQLDATABASE", "job_aggregator"),
+        host=os.getenv("mysql.railway.internal", "localhost"),
+        port=int(os.getenv("3306", "3306")),
+        user=os.getenv("root", "root"),
+        password=os.getenv("RQVRuTuzkxCzQvLQWQSnUxCkDhZzYnUM", ""),
+        database=os.getenv("railway", "job_aggregator"),
         charset="utf8mb4",
     )
 
