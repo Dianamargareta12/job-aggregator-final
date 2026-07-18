@@ -4,7 +4,7 @@ require_once __DIR__ . "/../config.php";
 
 // Jika admin sudah login, langsung menuju dashboard.
 if (isset($_SESSION["admin_id"])) {
-    header("Location: dashboard.php");
+    header("Location: /admin/dashboard.php");
     exit;
 }
 
@@ -47,7 +47,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             $_SESSION["admin_username"] = $admin["username"];
             $_SESSION["admin_login_time"] = time();
 
-            header("Location: dashboard.php");
+            header("Location: /admin/dashboard.php");
             exit;
         }
 
