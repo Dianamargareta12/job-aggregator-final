@@ -77,7 +77,7 @@ if (strlen($logContent) > 20000) {
     <div class="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <h2 class="text-lg font-bold">Kontrol Scraping</h2>
-        <p class="mt-2 text-sm text-slate-500">Mode keyword mengikuti TEST_MODE pada main.py.</p>
+        <p class="mt-2 text-sm text-slate-500">Mode keyword mengikuti pada main.py.</p>
         <p class="mt-1 text-xs text-slate-400"><?= htmlspecialchars($mainPath) ?></p>
       </div>
       <form method="POST" onsubmit="return confirm('Jalankan scraping sekarang?');">
