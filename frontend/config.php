@@ -1,21 +1,48 @@
 <?php
 
-$host = getenv("MYSQLHOST");
-$user = getenv("MYSQLUSER");
-$password = getenv("MYSQLPASSWORD");
-$database = getenv("MYSQLDATABASE");
-$port = getenv("MYSQLPORT");
-
-if (!$host || !$user || !$database || !$port) {
-    die("Environment variable database Railway belum terbaca.");
+// Menjalankan session jika belum aktif.
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
-$conn = new mysqli($host, $user, $password, $database, (int)$port);
+// Mengecek apakah aplikasi berjalan di Railway.
+$isRailway = getenv("MYSQLHOST") !== false
+    && getenv("MYSQLHOST") !== "";
 
-if ($conn->connect_error) {
-    die("Koneksi database gagal: " . $conn->connect_error);
+// Konfigurasi database.
+if ($isRailway) {
+    $host = getenv("MYSQLHOST");
+    $port = (int) (getenv("MYSQLPORT") ?: 3306);
+    $user = getenv("MYSQLUSER");
+    $password = getenv("MYSQLPASSWORD");
+    $database = getenv("MYSQLDATABASE");
+} else {
+    // Konfigurasi database localhost.
+    $host = "localhost";
+    $port = 3306;
+    $user = "root";
+    $password = "";
+    $database = "job_aggregator_final";
 }
 
-$conn->set_charset("utf8mb4");
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-?>
+try {
+    $conn = new mysqli(
+        $host,
+        $user,
+        $password,
+        $database,
+        $port
+    );
+
+    $conn->set_charset("utf8mb4");
+
+} catch (mysqli_sql_exception $error) {
+    http_response_code(500);
+
+    die(
+        "Koneksi database gagal: " .
+        htmlspecialchars($error->getMessage())
+    );
+}

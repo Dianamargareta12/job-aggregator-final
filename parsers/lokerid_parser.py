@@ -1,6 +1,7 @@
 import asyncio
 from urllib.parse import quote_plus, urlparse, urlunparse
 from playwright.async_api import async_playwright
+from bs4 import BeautifulSoup
 
 try:
     from parsers.base_scraper import BaseScraper
@@ -220,7 +221,7 @@ class LokerIDParser(BaseScraper):
         search_url = self.build_search_url(keyword)
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False)
+            browser = await p.chromium.launch(headless=True)
 
             context = await browser.new_context(
                 user_agent=(

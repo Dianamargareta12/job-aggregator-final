@@ -1,10 +1,29 @@
-__pycache__/
-*.pyc
-venv/
-.venv/
+# Environment dan kredensial
 .env
-temp_profile/
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Data hasil scraping
+data/raw/*.csv
+data/clean/*.csv
+data/rejected/*.csv
+
+# Log
+storage/*.log
 *.log
+
+# Editor dan sistem
 .vscode/
+.idea/
 .DS_Store
 Thumbs.db
+
+# Cache
+.pytest_cache/
+.mypy_cache/

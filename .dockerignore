@@ -1,0 +1,16 @@
+.git
+.gitignore
+.env
+.env.*
+__pycache__
+*.pyc
+*.pyo
+*.log
+storage/*.log
+data/raw/*.csv
+data/clean/*.csv
+data/rejected/*.csv
+.vscode
+.idea
+Thumbs.db
+.DS_Store

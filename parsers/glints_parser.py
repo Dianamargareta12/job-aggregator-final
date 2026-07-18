@@ -2,6 +2,7 @@ import asyncio
 import re
 from urllib.parse import quote_plus, urlparse, urlunparse
 from playwright.async_api import async_playwright
+from bs4 import BeautifulSoup
 
 
 class GlintsParser:
@@ -208,7 +209,7 @@ class GlintsParser:
         search_url = self.build_search_url(keyword)
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False)
+            browser = await p.chromium.launch(headless=True)
             context = await browser.new_context(
                 user_agent=(
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -222,7 +223,8 @@ class GlintsParser:
 
             try:
                 print(f"[{self.portal_name}] Membuka: {search_url}")
-                await page.goto(search_url, wait_until="domcontentloaded")
+                await page.goto(search_url, 
+                wait_until="domcontentloaded")
                 await asyncio.sleep(5)
 
                 try:
