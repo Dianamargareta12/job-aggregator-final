@@ -111,7 +111,7 @@ LOCATION_KEYWORDS = [
 ]
 
 # Ubah menjadi False jika ingin menjalankan seluruh keyword
-TEST_MODE = False
+TEST_MODE = True
 
 # Keyword yang digunakan saat testing
 TEST_KEYWORDS = [
