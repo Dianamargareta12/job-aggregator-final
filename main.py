@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import os
 import random
@@ -177,6 +178,48 @@ def create_scraping_run():
             run_id = cursor.lastrowid
         connection.commit()
         return run_id
+    finally:
+        connection.close()
+
+
+def start_existing_scraping_run(run_id):
+    """
+    Menggunakan baris scraping_runs yang sudah dibuat oleh panel admin.
+
+    Fungsi ini mengubah status queued menjadi running tanpa membuat
+    record scraping_runs baru.
+    """
+    connection = get_database_connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE scraping_runs
+                SET status=%s,
+                    started_at=%s,
+                    finished_at=NULL,
+                    message=%s
+                WHERE id=%s
+                  AND status IN ('queued', 'running')
+                """,
+                (
+                    "running",
+                    datetime.now(),
+                    "Worker lokal sedang menjalankan proses scraping.",
+                    run_id,
+                ),
+            )
+
+            if cursor.rowcount == 0:
+                raise RuntimeError(
+                    f"Scraping run ID {run_id} tidak ditemukan "
+                    "atau statusnya sudah tidak dapat dijalankan."
+                )
+
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
     finally:
         connection.close()
 
@@ -456,14 +499,22 @@ def preprocess_jobs(raw_dataframe):
     return clean_dataframe, rejected_dataframe, raw_status_dataframe, statistics
 
 
-async def main():
+async def main(existing_run_id=None):
     run_id = None
     try:
         os.makedirs(RAW_DIR, exist_ok=True)
         os.makedirs(REJECTED_DIR, exist_ok=True)
         os.makedirs(CLEAN_DIR, exist_ok=True)
 
-        run_id = create_scraping_run()
+        if existing_run_id is None:
+            run_id = create_scraping_run()
+            print("[MODE MANUAL] Membuat scraping run baru.")
+        else:
+            run_id = existing_run_id
+            start_existing_scraping_run(run_id)
+            print(
+                f"[MODE WORKER] Menggunakan scraping run yang sudah ada: #{run_id}"
+            )
         keywords = build_keywords()
         parsers = [
             GlintsParser("Glints"),
@@ -581,4 +632,18 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    argument_parser = argparse.ArgumentParser(
+        description="Menjalankan scraping Job Aggregator."
+    )
+    argument_parser.add_argument(
+        "--run-id",
+        type=int,
+        default=None,
+        help=(
+            "ID pada tabel scraping_runs yang sudah dibuat oleh panel admin. "
+            "Jika tidak diberikan, main.py akan membuat scraping run baru."
+        ),
+    )
+
+    arguments = argument_parser.parse_args()
+    asyncio.run(main(arguments.run_id))
