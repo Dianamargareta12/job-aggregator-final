@@ -39,6 +39,7 @@ function getActiveScrapingRun(mysqli $conn): ?array
     $sql = "
         SELECT
             id,
+            portal,
             status,
             started_at,
             finished_at,
@@ -74,6 +75,7 @@ function getLatestScrapingRun(mysqli $conn): ?array
     $sql = "
         SELECT
             id,
+            portal,
             status,
             started_at,
             finished_at,
@@ -116,6 +118,7 @@ function getScrapingHistory(mysqli $conn, int $limit = 10): array
     $sql = "
         SELECT
             id,
+            portal,
             status,
             started_at,
             finished_at,
@@ -179,6 +182,18 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     ) {
         $errorMessage = "Permintaan tidak valid. Silakan muat ulang halaman.";
     } else {
+        $selectedPortal = trim((string) ($_POST["portal"] ?? "all"));
+
+        $allowedPortals = [
+            "all",
+            "Glints",
+            "Jobstreet",
+            "Loker.id",
+        ];
+
+        if (!in_array($selectedPortal, $allowedPortals, true)) {
+            $errorMessage = "Portal yang dipilih tidak valid.";
+        } else {
         try {
             /*
              * Pemeriksaan dilakukan lagi untuk mencegah dua antrean
@@ -223,6 +238,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 $insertSql = "
                     INSERT INTO scraping_runs (
                         status,
+                        portal,
                         started_at,
                         finished_at,
                         raw_glints,
@@ -239,6 +255,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                         message
                     ) VALUES (
                         'queued',
+                        ?,
                         NULL,
                         NULL,
                         0,
@@ -256,8 +273,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     )
                 ";
 
+                $portalLabel = $selectedPortal === "all"
+                    ? "Semua Portal"
+                    : $selectedPortal;
+
                 $queueMessage =
-                    "Menunggu worker lokal untuk menjalankan proses scraping.";
+                    "Menunggu worker lokal untuk menjalankan scraping "
+                    . $portalLabel
+                    . ".";
 
                 $statement = $conn->prepare($insertSql);
 
@@ -267,7 +290,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     );
                 }
 
-                $statement->bind_param("s", $queueMessage);
+                $statement->bind_param(
+                    "ss",
+                    $selectedPortal,
+                    $queueMessage
+                );
 
                 if (!$statement->execute()) {
                     throw new RuntimeException(
@@ -282,7 +309,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 $conn->commit();
 
                 $message =
-                    "Permintaan scraping berhasil dimasukkan ke antrean "
+                    "Permintaan scraping "
+                    . $portalLabel
+                    . " berhasil dimasukkan ke antrean "
                     . "#{$runId}. Worker lokal akan menjalankannya.";
 
                 /*
@@ -300,6 +329,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             }
 
             $errorMessage = $error->getMessage();
+        }
         }
     }
 }
@@ -484,6 +514,35 @@ function statusBadgeClass(string $status): string
                     value="<?= escapeHtml($_SESSION["csrf_token"]) ?>"
                 >
 
+                <div class="mb-3">
+                    <label
+                        for="portal"
+                        class="mb-2 block text-sm font-semibold text-slate-700"
+                    >
+                        Pilih Portal
+                    </label>
+
+                    <select
+                        id="portal"
+                        name="portal"
+                        <?= $isActive ? "disabled" : "" ?>
+                        class="
+                            w-full rounded-xl border border-slate-300
+                            bg-white px-4 py-3 text-sm text-slate-700
+                            outline-none transition
+                            focus:border-blue-500 focus:ring-2
+                            focus:ring-blue-100
+                            disabled:cursor-not-allowed
+                            disabled:bg-slate-100
+                        "
+                    >
+                        <option value="all">Semua Portal</option>
+                        <option value="Glints">Glints</option>
+                        <option value="Jobstreet">Jobstreet</option>
+                        <option value="Loker.id">Loker.id</option>
+                    </select>
+                </div>
+
                 <button
                     type="submit"
                     <?= $isActive ? "disabled" : "" ?>
@@ -525,6 +584,17 @@ function statusBadgeClass(string $status): string
                         </p>
 
                         <p class="mt-1 text-sm text-blue-700">
+                            Portal:
+                            <span class="font-semibold">
+                                <?= escapeHtml(
+                                    ($activeRun["portal"] ?? "all") === "all"
+                                        ? "Semua Portal"
+                                        : ($activeRun["portal"] ?? "-")
+                                ) ?>
+                            </span>
+                        </p>
+
+                        <p class="mt-1 text-sm text-blue-700">
                             <?= escapeHtml(
                                 $activeRun["message"]
                                 ?? "Menunggu pembaruan status."
@@ -554,7 +624,7 @@ function statusBadgeClass(string $status): string
         <?php endif; ?>
 
         <!-- Informasi proses terakhir -->
-        <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
 
             <div class="rounded-xl bg-slate-50 p-4">
                 <p class="text-xs font-medium text-slate-500">
@@ -563,6 +633,20 @@ function statusBadgeClass(string $status): string
 
                 <p class="mt-2 text-lg font-bold text-slate-800">
                     #<?= (int) ($latestRun["id"] ?? 0) ?>
+                </p>
+            </div>
+
+            <div class="rounded-xl bg-slate-50 p-4">
+                <p class="text-xs font-medium text-slate-500">
+                    Portal
+                </p>
+
+                <p class="mt-2 text-sm font-bold text-slate-800">
+                    <?= escapeHtml(
+                        ($latestRun["portal"] ?? "all") === "all"
+                            ? "Semua Portal"
+                            : ($latestRun["portal"] ?? "-")
+                    ) ?>
                 </p>
             </div>
 
@@ -735,6 +819,14 @@ function statusBadgeClass(string $status): string
                                    font-semibold uppercase
                                    tracking-wide text-slate-500"
                         >
+                            Portal
+                        </th>
+
+                        <th
+                            class="px-5 py-3 text-left text-xs
+                                   font-semibold uppercase
+                                   tracking-wide text-slate-500"
+                        >
                             Status
                         </th>
 
@@ -793,7 +885,7 @@ function statusBadgeClass(string $status): string
                 <?php if (empty($scrapingHistory)): ?>
                     <tr>
                         <td
-                            colspan="8"
+                            colspan="9"
                             class="px-5 py-8 text-center
                                    text-sm text-slate-500"
                         >
@@ -810,6 +902,17 @@ function statusBadgeClass(string $status): string
                                        font-semibold text-slate-800"
                             >
                                 #<?= (int) $run["id"] ?>
+                            </td>
+
+                            <td
+                                class="whitespace-nowrap px-5 py-4
+                                       text-sm font-semibold text-slate-700"
+                            >
+                                <?= escapeHtml(
+                                    ($run["portal"] ?? "all") === "all"
+                                        ? "Semua Portal"
+                                        : ($run["portal"] ?? "-")
+                                ) ?>
                             </td>
 
                             <td class="whitespace-nowrap px-5 py-4">

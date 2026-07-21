@@ -42,7 +42,6 @@ def write_log(message: str) -> None:
 def load_environment() -> None:
     """
     Membaca file .env dari folder project jika python-dotenv tersedia.
-    Tanpa python-dotenv, worker tetap memakai environment variable Windows.
     """
     if load_dotenv is not None:
         env_path = PROJECT_ROOT / ".env"
@@ -79,7 +78,7 @@ def get_database_connection():
         database=os.getenv("MYSQLDATABASE"),
         charset="utf8mb4",
         cursorclass=DictCursor,
-        autocommit=False,
+        autocommit=True,
         connect_timeout=15,
         read_timeout=30,
         write_timeout=30,
@@ -103,74 +102,86 @@ def test_database_connection() -> None:
         connection.close()
 
 
-def claim_next_queued_run():
+def get_next_queued_run():
     """
-    Mengambil satu antrean paling lama secara atomik.
+    Membaca satu antrean queued paling lama beserta portal yang dipilih.
 
-    Baris langsung diubah dari queued menjadi running agar dua worker
-    tidak menjalankan scraping run yang sama.
+    Nilai portal yang didukung:
+    - all
+    - Glints
+    - Jobstreet
+    - Loker.id
+
+    Worker tidak mengubah status. main.py yang akan mengubah:
+    queued -> running -> success/failed.
     """
     connection = get_database_connection()
 
     try:
-        connection.begin()
-
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT id
+                SELECT id, portal
                 FROM scraping_runs
                 WHERE status = 'queued'
                 ORDER BY id ASC
                 LIMIT 1
-                FOR UPDATE
                 """
             )
-
             row = cursor.fetchone()
 
-            if not row:
-                connection.commit()
-                return None
+        if not row:
+            return None
 
-            run_id = int(row["id"])
+        portal = str(row.get("portal") or "all").strip()
 
-            cursor.execute(
-                """
-                UPDATE scraping_runs
-                SET status = %s,
-                    started_at = %s,
-                    finished_at = NULL,
-                    message = %s
-                WHERE id = %s
-                  AND status = 'queued'
-                """,
-                (
-                    "running",
-                    datetime.now(),
-                    "Antrean diambil oleh worker lokal. "
-                    "Main.py akan segera dijalankan.",
-                    run_id,
-                ),
+        allowed_portals = {
+            "all",
+            "Glints",
+            "Jobstreet",
+            "Loker.id",
+        }
+
+        if portal not in allowed_portals:
+            raise RuntimeError(
+                f"Portal pada antrean tidak valid: {portal}. "
+                "Pilihan yang diperbolehkan: "
+                "all, Glints, Jobstreet, Loker.id."
             )
 
-            if cursor.rowcount != 1:
-                connection.rollback()
-                return None
-
-        connection.commit()
-        return run_id
-
-    except Exception:
-        connection.rollback()
-        raise
+        return {
+            "id": int(row["id"]),
+            "portal": portal,
+        }
 
     finally:
         connection.close()
 
 
+def get_run_status(run_id: int):
+    """Membaca status scraping run tertentu."""
+    connection = get_database_connection()
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT status, message
+                FROM scraping_runs
+                WHERE id = %s
+                LIMIT 1
+                """,
+                (run_id,),
+            )
+            return cursor.fetchone()
+    finally:
+        connection.close()
+
+
 def mark_run_failed(run_id: int, message: str) -> None:
-    """Menandai scraping run gagal jika proses tidak sempat ditangani main.py."""
+    """
+    Menandai run gagal hanya jika main.py tidak sempat memperbaruinya.
+    """
     connection = get_database_connection()
 
     try:
@@ -191,22 +202,14 @@ def mark_run_failed(run_id: int, message: str) -> None:
                     run_id,
                 ),
             )
-
-        connection.commit()
-
-    except Exception:
-        connection.rollback()
-        raise
-
     finally:
         connection.close()
 
 
 def get_python_command() -> list[str]:
     """
-    Pengguna menjalankan Python menggunakan perintah `py`.
-    Pada Windows worker akan memakai `py`; pada sistem lain memakai
-    interpreter yang sedang menjalankan worker.
+    Pada Windows menggunakan perintah `py`.
+    Pada sistem lain memakai interpreter aktif.
     """
     if os.name == "nt":
         return ["py"]
@@ -214,8 +217,11 @@ def get_python_command() -> list[str]:
     return [sys.executable]
 
 
-def run_main_process(run_id: int) -> int:
-    """Menjalankan main.py untuk scraping run tertentu."""
+def run_main_process(run_id: int, portal: str) -> int:
+    """
+    Menjalankan main.py dengan scraping run ID dan portal
+    yang dipilih dari antrean.
+    """
     if not MAIN_PATH.exists():
         raise FileNotFoundError(
             f"main.py tidak ditemukan di: {MAIN_PATH}"
@@ -225,12 +231,11 @@ def run_main_process(run_id: int) -> int:
         str(MAIN_PATH),
         "--run-id",
         str(run_id),
+        "--portal",
+        portal,
     ]
 
-    write_log(
-        "Menjalankan perintah: "
-        + " ".join(command)
-    )
+    write_log("Menjalankan perintah: " + " ".join(command))
 
     process = subprocess.Popen(
         command,
@@ -240,7 +245,8 @@ def run_main_process(run_id: int) -> int:
     return_code = process.wait()
 
     write_log(
-        f"Proses main.py untuk run #{run_id} selesai "
+        f"main.py untuk run #{run_id} "
+        f"portal {portal} selesai "
         f"dengan exit code {return_code}."
     )
 
@@ -248,7 +254,7 @@ def run_main_process(run_id: int) -> int:
 
 
 def handle_stop_signal(signum, frame) -> None:
-    """Menghentikan worker dengan aman saat Ctrl+C atau terminal ditutup."""
+    """Menghentikan worker dengan aman."""
     global STOP_REQUESTED
     STOP_REQUESTED = True
     write_log("Permintaan berhenti diterima. Worker akan dihentikan.")
@@ -265,10 +271,11 @@ def run_worker() -> None:
         signal.signal(signal.SIGTERM, handle_stop_signal)
 
     write_log("=" * 60)
-    write_log("JOB AGGREGATOR LOCAL WORKER")
+    write_log("JOB AGGREGATOR LOCAL WORKER V3 - PORTAL SELECTOR")
     write_log("=" * 60)
     write_log(f"Folder project: {PROJECT_ROOT}")
     write_log(f"Interval pengecekan: {POLL_INTERVAL_SECONDS} detik")
+    write_log("Perubahan status dikelola sepenuhnya oleh main.py.")
 
     while not STOP_REQUESTED:
         try:
@@ -283,29 +290,48 @@ def run_worker() -> None:
 
     while not STOP_REQUESTED:
         try:
-            run_id = claim_next_queued_run()
+            run_data = get_next_queued_run()
 
-            if run_id is None:
+            if run_data is None:
                 write_log("Tidak ada antrean. Menunggu...")
                 time.sleep(POLL_INTERVAL_SECONDS)
                 continue
 
-            write_log(f"Antrean scraping #{run_id} ditemukan.")
+            run_id = run_data["id"]
+            portal = run_data["portal"]
+
+            write_log(
+                f"Antrean scraping #{run_id} ditemukan. "
+                f"Portal: {portal}"
+            )
 
             try:
-                return_code = run_main_process(run_id)
+                return_code = run_main_process(run_id, portal)
 
-                if return_code != 0:
-                    try:
+                status_data = get_run_status(run_id)
+                current_status = (
+                    status_data.get("status")
+                    if status_data
+                    else None
+                )
+
+                if return_code == 0:
+                    write_log(
+                        f"Status akhir run #{run_id}: "
+                        f"{current_status or 'tidak ditemukan'}."
+                    )
+                else:
+                    write_log(
+                        f"main.py gagal untuk run #{run_id}. "
+                        f"Status database: {current_status or '-'}."
+                    )
+
+                    if current_status in {"queued", "running"}:
                         mark_run_failed(
                             run_id,
                             "Worker mendeteksi main.py berhenti dengan "
-                            f"exit code {return_code}. Periksa log terminal.",
-                        )
-                    except Exception as update_error:
-                        write_log(
-                            "Gagal memperbarui status failed: "
-                            f"{update_error}"
+                            f"exit code {return_code}. Periksa output terminal "
+                            "dan storage/worker.log.",
                         )
 
             except Exception as process_error:
@@ -315,11 +341,19 @@ def run_worker() -> None:
                 )
 
                 try:
-                    mark_run_failed(
-                        run_id,
-                        "Worker gagal menjalankan main.py: "
-                        f"{process_error}",
+                    status_data = get_run_status(run_id)
+                    current_status = (
+                        status_data.get("status")
+                        if status_data
+                        else None
                     )
+
+                    if current_status in {"queued", "running"}:
+                        mark_run_failed(
+                            run_id,
+                            "Worker gagal menjalankan main.py: "
+                            f"{process_error}",
+                        )
                 except Exception as update_error:
                     write_log(
                         "Gagal memperbarui status failed: "

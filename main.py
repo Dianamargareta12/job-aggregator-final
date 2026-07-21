@@ -112,7 +112,7 @@ LOCATION_KEYWORDS = [
 ]
 
 # Ubah menjadi False jika ingin menjalankan seluruh keyword
-TEST_MODE = True
+TEST_MODE = False
 
 # Keyword yang digunakan saat testing
 TEST_KEYWORDS = [
@@ -152,12 +152,32 @@ def build_keywords():
 
 
 def get_database_connection():
+    required_variables = [
+        "MYSQLHOST",
+        "MYSQLPORT",
+        "MYSQLUSER",
+        "MYSQLPASSWORD",
+        "MYSQLDATABASE",
+    ]
+
+    missing_variables = [
+        variable
+        for variable in required_variables
+        if not os.getenv(variable)
+    ]
+
+    if missing_variables:
+        raise RuntimeError(
+            "Environment variable database belum lengkap: "
+            + ", ".join(missing_variables)
+        )
+
     return pymysql.connect(
-        host=os.getenv("MYSQLHOST", "localhost"),
-        port=int(os.getenv("MYSQLPORT", "3306")),
-        user=os.getenv("MYSQLUSER", "root"),
-        password=os.getenv("MYSQLPASSWORD", ""),
-        database=os.getenv("MYSQLDATABASE", "job_aggregator_final"),
+        host=os.getenv("MYSQLHOST"),
+        port=int(os.getenv("MYSQLPORT")),
+        user=os.getenv("MYSQLUSER"),
+        password=os.getenv("MYSQLPASSWORD"),
+        database=os.getenv("MYSQLDATABASE"),
         charset="utf8mb4",
         cursorclass=pymysql.cursors.DictCursor,
         autocommit=False,
@@ -190,21 +210,21 @@ def start_existing_scraping_run(run_id):
     record scraping_runs baru.
     """
     connection = get_database_connection()
+
     try:
         with connection.cursor() as cursor:
             cursor.execute(
                 """
                 UPDATE scraping_runs
                 SET status=%s,
-                    started_at=%s,
+                    started_at=NOW(),
                     finished_at=NULL,
                     message=%s
                 WHERE id=%s
-                  AND status IN ('queued', 'running')
+                  AND status='queued'
                 """,
                 (
                     "running",
-                    datetime.now(),
                     "Worker lokal sedang menjalankan proses scraping.",
                     run_id,
                 ),
@@ -217,40 +237,63 @@ def start_existing_scraping_run(run_id):
                 )
 
         connection.commit()
+
     except Exception:
         connection.rollback()
         raise
+
     finally:
         connection.close()
 
 
 def update_scraping_run_success(run_id, statistics):
     connection = get_database_connection()
+
     try:
         with connection.cursor() as cursor:
             cursor.execute(
                 """
                 UPDATE scraping_runs
-                SET status=%s, finished_at=%s,
-                    raw_glints=%s, raw_jobstreet=%s, raw_lokerid=%s,
-                    total_raw=%s, empty_data=%s, duplicate_data=%s,
-                    invalid_url=%s, education_not_detected=%s,
-                    total_rejected=%s, total_clean=%s,
-                    clean_csv_path=%s, message=%s
+                SET status=%s,
+                    finished_at=NOW(),
+                    raw_glints=%s,
+                    raw_jobstreet=%s,
+                    raw_lokerid=%s,
+                    total_raw=%s,
+                    empty_data=%s,
+                    duplicate_data=%s,
+                    invalid_url=%s,
+                    education_not_detected=%s,
+                    total_rejected=%s,
+                    total_clean=%s,
+                    clean_csv_path=%s,
+                    message=%s
                 WHERE id=%s
                 """,
                 (
-                    "success", datetime.now(), statistics["raw_glints"],
-                    statistics["raw_jobstreet"], statistics["raw_lokerid"],
-                    statistics["total_raw"], statistics["empty_data"],
-                    statistics["duplicate_data"], statistics["invalid_url"],
+                    "success",
+                    statistics["raw_glints"],
+                    statistics["raw_jobstreet"],
+                    statistics["raw_lokerid"],
+                    statistics["total_raw"],
+                    statistics["empty_data"],
+                    statistics["duplicate_data"],
+                    statistics["invalid_url"],
                     statistics["education_not_detected"],
-                    statistics["total_rejected"], statistics["total_clean"],
-                    CLEAN_PATH, "Scraping dan preprocessing berhasil diselesaikan.",
+                    statistics["total_rejected"],
+                    statistics["total_clean"],
+                    CLEAN_PATH,
+                    "Scraping dan preprocessing berhasil diselesaikan.",
                     run_id,
                 ),
             )
+
         connection.commit()
+
+    except Exception:
+        connection.rollback()
+        raise
+
     finally:
         connection.close()
 
@@ -258,18 +301,32 @@ def update_scraping_run_success(run_id, statistics):
 def update_scraping_run_failed(run_id, message):
     if not run_id:
         return
+
     connection = get_database_connection()
+
     try:
         with connection.cursor() as cursor:
             cursor.execute(
                 """
                 UPDATE scraping_runs
-                SET status=%s, finished_at=%s, message=%s
+                SET status=%s,
+                    finished_at=NOW(),
+                    message=%s
                 WHERE id=%s
                 """,
-                ("failed", datetime.now(), str(message)[:5000], run_id),
+                (
+                    "failed",
+                    str(message)[:5000],
+                    run_id,
+                ),
             )
+
         connection.commit()
+
+    except Exception:
+        connection.rollback()
+        raise
+
     finally:
         connection.close()
 
@@ -499,7 +556,7 @@ def preprocess_jobs(raw_dataframe):
     return clean_dataframe, rejected_dataframe, raw_status_dataframe, statistics
 
 
-async def main(existing_run_id=None):
+async def main(existing_run_id=None, selected_portal="all"):
     run_id = None
     try:
         os.makedirs(RAW_DIR, exist_ok=True)
@@ -516,13 +573,29 @@ async def main(existing_run_id=None):
                 f"[MODE WORKER] Menggunakan scraping run yang sudah ada: #{run_id}"
             )
         keywords = build_keywords()
-        parsers = [
-            GlintsParser("Glints"),
-            JobstreetParser("Jobstreet"),
-            LokerIDParser("Loker.id"),
-        ]
+
+        portal_parsers = {
+            "Glints": GlintsParser("Glints"),
+            "Jobstreet": JobstreetParser("Jobstreet"),
+            "Loker.id": LokerIDParser("Loker.id"),
+        }
+
+        if selected_portal == "all":
+            parsers = list(portal_parsers.values())
+        else:
+            selected_parser = portal_parsers.get(selected_portal)
+
+            if selected_parser is None:
+                valid_portals = ", ".join(["all", *portal_parsers.keys()])
+                raise ValueError(
+                    f"Portal tidak valid: {selected_portal}. "
+                    f"Pilihan yang tersedia: {valid_portals}"
+                )
+
+            parsers = [selected_parser]
 
         print("=== MEMULAI SCRAPING JOB AGGREGATOR ===")
+        print(f"Mode portal: {selected_portal}")
         print(f"Target: {len(keywords)} keyword pada {len(parsers)} portal")
         print(f"Scraping run ID: {run_id}\n")
 
@@ -644,6 +717,27 @@ if __name__ == "__main__":
             "Jika tidak diberikan, main.py akan membuat scraping run baru."
         ),
     )
+    argument_parser.add_argument(
+        "--portal",
+        type=str,
+        default="all",
+        choices=[
+            "all",
+            "Glints",
+            "Jobstreet",
+            "Loker.id",
+        ],
+        help=(
+            "Portal yang akan di-scrape. Gunakan 'all' untuk semua portal, "
+            "atau pilih Glints, Jobstreet, maupun Loker.id."
+        ),
+    )
 
     arguments = argument_parser.parse_args()
-    asyncio.run(main(arguments.run_id))
+
+    asyncio.run(
+        main(
+            existing_run_id=arguments.run_id,
+            selected_portal=arguments.portal,
+        )
+    )

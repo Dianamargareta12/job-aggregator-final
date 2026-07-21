@@ -439,8 +439,33 @@ def save_csv_to_mysql(
                     "tidak sesuai dengan jumlah data CSV."
                 )
 
-            # Data lama baru dikosongkan setelah import sementara berhasil.
-            cursor.execute("DELETE FROM jobs")
+            # Hapus hanya data dari portal yang sedang diimpor.
+            portals_to_replace = sorted(
+                {
+                    normalize_portal(portal)
+                    for portal in dataframe["portal_sumber"].tolist()
+                    if normalize_portal(portal)
+                }
+            )
+
+            if not portals_to_replace:
+                raise ValueError(
+                    "Portal sumber tidak ditemukan pada data CSV."
+                )
+
+            placeholders = ", ".join(
+                ["%s"] * len(portals_to_replace)
+            )
+
+            delete_query = f"""
+                DELETE FROM jobs
+                WHERE portal_sumber IN ({placeholders})
+            """
+
+            cursor.execute(
+                delete_query,
+                tuple(portals_to_replace),
+            )
 
             cursor.execute(
                 """
