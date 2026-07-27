@@ -338,7 +338,7 @@ function initialCompany($company) {
                 </div>
 
                 <p class="text-sm text-blue-200">
-                    © 2025 Job Aggregator. All rights reserved.
+                    © 2026 Job Aggregator. All rights reserved.
                 </p>
             </div>
         </div>

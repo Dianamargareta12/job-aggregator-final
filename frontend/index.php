@@ -750,7 +750,7 @@ function getJobUrl($job)
         </div>
 
         <div class="border-t border-blue-800 mt-8 pt-6 flex flex-col md:flex-row justify-between gap-3 text-sm text-blue-200">
-            <p>© 2025 Job Aggregator. All rights reserved.</p>
+            <p>© 2026 Job Aggregator. All rights reserved.</p>
             <p>Dibuat dengan ❤️ untuk pencari kerja di Indonesia</p>
         </div>
 
