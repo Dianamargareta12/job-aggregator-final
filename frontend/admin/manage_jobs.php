@@ -183,6 +183,9 @@ function pageUrl(array $changes = []): string {
         $pages = array_values(array_unique($pages));
         sort($pages);
       ?>
+      <?php
+echo "TEST PAGINATION";
+?>
       <div class="flex flex-wrap items-center justify-center gap-2 border-t px-5 py-4">
         <?php if ($page > 1): ?>
           <a class="rounded border px-3 py-2 hover:bg-slate-50" href="<?= htmlspecialchars(pageUrl(["page"=>$page-1])) ?>" title="Sebelumnya">&lsaquo;</a>
