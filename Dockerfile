@@ -23,8 +23,8 @@ COPY requirements.txt /app/requirements.txt
 # Instal library Python dan Chromium beserta dependency Linux-nya.
 RUN python3 -m pip install --no-cache-dir --break-system-packages -r /app/requirements.txt \
     && python3 -m playwright install --with-deps chromium
-    
-#chace-bust 2026-07-27
+
+# cache-bust v2
 COPY . /app
 
 RUN mkdir -p /app/data/raw /app/data/clean /app/data/rejected /app/storage \
