@@ -1,4 +1,5 @@
 <?php
+// VERSI-BARU-PAGINATION-2026
 require_once __DIR__ . "/auth.php";
 
 if (empty($_SESSION["csrf_token"])) {
