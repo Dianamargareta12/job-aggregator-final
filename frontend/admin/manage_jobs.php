@@ -120,7 +120,7 @@ function pageUrl(array $changes = []): string {
     </div>
   </form>
 
-  <div class="overflow-hidden rounded-xl bg-white shadow-sm">
+  <div class="overflow-visible rounded-xl bg-white shadow-sm">
     <div class="flex justify-between border-b px-5 py-4">
       <strong>Total: <?= number_format($totalRows, 0, ",", ".") ?></strong>
       <span class="text-sm text-slate-500">Halaman <?= $page ?> / <?= $totalPages ?></span>
