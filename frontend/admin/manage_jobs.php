@@ -170,13 +170,15 @@ function pageUrl(array $changes = []): string {
     <?php if ($totalPages > 1): ?>
       <?php
         // Bangun daftar nomor halaman dengan ellipsis (...)
+        $curr = (int)$page;
+        $last = (int)$totalPages;
         $range = 2; // jumlah halaman di kiri/kanan halaman aktif
         $pages = [];
         $pages[] = 1;
-        for ($i = $page - $range; $i <= $page + $range; $i++) {
-            if ($i > 1 && $i < $totalPages) $pages[] = $i;
+        for ($i = $curr - $range; $i <= $curr + $range; $i++) {
+            if ($i > 1 && $i < $last) $pages[] = $i;
         }
-        if ($totalPages > 1) $pages[] = $totalPages;
+        if ($last > 1) $pages[] = $last;
         $pages = array_values(array_unique($pages));
         sort($pages);
       ?>
@@ -185,11 +187,11 @@ function pageUrl(array $changes = []): string {
           <a class="rounded border px-3 py-2 hover:bg-slate-50" href="<?= htmlspecialchars(pageUrl(["page"=>$page-1])) ?>" title="Sebelumnya">&lsaquo;</a>
         <?php endif; ?>
 
-        <?php $prev = 0; foreach ($pages as $p): ?>
+        <?php $prev = 0; foreach ($pages as $p): $p = (int)$p; ?>
           <?php if ($prev && $p - $prev > 1): ?>
             <span class="px-2 py-2 text-slate-400">…</span>
           <?php endif; ?>
-          <?php if ($p == $page): ?>
+          <?php if ($p == $curr): ?>
             <span class="rounded bg-blue-600 px-3 py-2 font-semibold text-white"><?= $p ?></span>
           <?php else: ?>
             <a class="rounded border px-3 py-2 hover:bg-slate-50" href="<?= htmlspecialchars(pageUrl(["page"=>$p])) ?>"><?= $p ?></a>
