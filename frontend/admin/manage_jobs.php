@@ -169,45 +169,70 @@ function pageUrl(array $changes = []): string {
       </table>
     </div>
     <?php if ($totalPages > 1): ?>
-      <?php
-        // Bangun daftar nomor halaman dengan ellipsis (...)
-        $curr = (int)$page;
-        $last = (int)$totalPages;
-        $range = 2; // jumlah halaman di kiri/kanan halaman aktif
-        $pages = [];
-        $pages[] = 1;
-        for ($i = $curr - $range; $i <= $curr + $range; $i++) {
-            if ($i > 1 && $i < $last) $pages[] = $i;
-        }
-        if ($last > 1) $pages[] = $last;
-        $pages = array_values(array_unique($pages));
-        sort($pages);
-      ?>
-      <?php
-echo "TEST PAGINATION";
+
+<?php
+$curr = (int)$page;
+$last = (int)$totalPages;
 ?>
-      <div class="flex flex-wrap items-center justify-center gap-2 border-t px-5 py-4">
-        <?php if ($page > 1): ?>
-          <a class="rounded border px-3 py-2 hover:bg-slate-50" href="<?= htmlspecialchars(pageUrl(["page"=>$page-1])) ?>" title="Sebelumnya">&lsaquo;</a>
-        <?php endif; ?>
 
-        <?php $prev = 0; foreach ($pages as $p): $p = (int)$p; ?>
-          <?php if ($prev && $p - $prev > 1): ?>
-            <span class="px-2 py-2 text-slate-400">…</span>
-          <?php endif; ?>
-          <?php if ($p == $curr): ?>
-            <span class="rounded bg-blue-600 px-3 py-2 font-semibold text-white"><?= $p ?></span>
-          <?php else: ?>
-            <a class="rounded border px-3 py-2 hover:bg-slate-50" href="<?= htmlspecialchars(pageUrl(["page"=>$p])) ?>"><?= $p ?></a>
-          <?php endif; ?>
-          <?php $prev = $p; ?>
-        <?php endforeach; ?>
+<div class="flex items-center justify-center gap-2 border-t px-5 py-4">
 
-        <?php if ($page < $totalPages): ?>
-          <a class="rounded border px-3 py-2 hover:bg-slate-50" href="<?= htmlspecialchars(pageUrl(["page"=>$page+1])) ?>" title="Berikutnya">&rsaquo;</a>
-        <?php endif; ?>
-      </div>
+    <?php if ($curr > 1): ?>
+        <a href="<?= pageUrl(["page"=>$curr-1]) ?>"
+           class="rounded border px-3 py-2 hover:bg-slate-100">
+            &laquo;
+        </a>
     <?php endif; ?>
+
+    <?php
+
+    $start = max(1, $curr - 2);
+    $end   = min($last, $curr + 2);
+
+    if($start > 1){
+        echo '<a href="'.pageUrl(["page"=>1]).'" class="rounded border px-3 py-2 hover:bg-slate-100">1</a>';
+
+        if($start > 2){
+            echo '<span class="px-2">...</span>';
+        }
+    }
+
+    for($i=$start;$i<=$end;$i++){
+
+        if($i==$curr){
+
+            echo '<span class="rounded bg-blue-600 text-white px-3 py-2">'.$i.'</span>';
+
+        }else{
+
+            echo '<a href="'.pageUrl(["page"=>$i]).'" class="rounded border px-3 py-2 hover:bg-slate-100">'.$i.'</a>';
+
+        }
+
+    }
+
+    if($end < $last){
+
+        if($end < $last-1){
+            echo '<span class="px-2">...</span>';
+        }
+
+        echo '<a href="'.pageUrl(["page"=>$last]).'" class="rounded border px-3 py-2 hover:bg-slate-100">'.$last.'</a>';
+
+    }
+
+    ?>
+
+    <?php if ($curr < $last): ?>
+        <a href="<?= pageUrl(["page"=>$curr+1]) ?>"
+           class="rounded border px-3 py-2 hover:bg-slate-100">
+            &raquo;
+        </a>
+    <?php endif; ?>
+
+</div>
+
+<?php endif; ?>
   </div>
 </main>
 </body>
