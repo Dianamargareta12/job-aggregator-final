@@ -168,13 +168,37 @@ function pageUrl(array $changes = []): string {
       </table>
     </div>
     <?php if ($totalPages > 1): ?>
-      <div class="flex justify-center gap-2 border-t px-5 py-4">
+      <?php
+        // Bangun daftar nomor halaman dengan ellipsis (...)
+        $range = 2; // jumlah halaman di kiri/kanan halaman aktif
+        $pages = [];
+        $pages[] = 1;
+        for ($i = $page - $range; $i <= $page + $range; $i++) {
+            if ($i > 1 && $i < $totalPages) $pages[] = $i;
+        }
+        if ($totalPages > 1) $pages[] = $totalPages;
+        $pages = array_values(array_unique($pages));
+        sort($pages);
+      ?>
+      <div class="flex flex-wrap items-center justify-center gap-2 border-t px-5 py-4">
         <?php if ($page > 1): ?>
-          <a class="rounded border px-3 py-2" href="<?= htmlspecialchars(pageUrl(["page"=>$page-1])) ?>">Sebelumnya</a>
+          <a class="rounded border px-3 py-2 hover:bg-slate-50" href="<?= htmlspecialchars(pageUrl(["page"=>$page-1])) ?>" title="Sebelumnya">&lsaquo;</a>
         <?php endif; ?>
-        <span class="rounded bg-blue-600 px-3 py-2 text-white"><?= $page ?></span>
+
+        <?php $prev = 0; foreach ($pages as $p): ?>
+          <?php if ($prev && $p - $prev > 1): ?>
+            <span class="px-2 py-2 text-slate-400">…</span>
+          <?php endif; ?>
+          <?php if ($p == $page): ?>
+            <span class="rounded bg-blue-600 px-3 py-2 font-semibold text-white"><?= $p ?></span>
+          <?php else: ?>
+            <a class="rounded border px-3 py-2 hover:bg-slate-50" href="<?= htmlspecialchars(pageUrl(["page"=>$p])) ?>"><?= $p ?></a>
+          <?php endif; ?>
+          <?php $prev = $p; ?>
+        <?php endforeach; ?>
+
         <?php if ($page < $totalPages): ?>
-          <a class="rounded border px-3 py-2" href="<?= htmlspecialchars(pageUrl(["page"=>$page+1])) ?>">Berikutnya</a>
+          <a class="rounded border px-3 py-2 hover:bg-slate-50" href="<?= htmlspecialchars(pageUrl(["page"=>$page+1])) ?>" title="Berikutnya">&rsaquo;</a>
         <?php endif; ?>
       </div>
     <?php endif; ?>
