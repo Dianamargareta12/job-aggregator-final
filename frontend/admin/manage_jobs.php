@@ -186,6 +186,18 @@ if ($start < 1) {
     $start = 1;
 }
 
+// jika masih berada di 5 halaman pertama
+if ($curr <= 5) {
+    $start = 1;
+    $end = min($window, $last);
+}
+
+// jika sudah mendekati halaman terakhir
+if ($curr >= $last - 4) {
+    $end = $last;
+    $start = max(1, $last - 4);
+}
+
 // jika terlalu kanan
 if ($end > $last) {
     $start -= ($end - $last);
