@@ -1,7 +1,7 @@
 <?php
 $currentPage = basename($_SERVER["PHP_SELF"] ?? "");
-function navClass(string $page, string $currentPage): string {
-    return $page === $currentPage
+function navClass(string $navUrl, string $currentPage): string {
+    return $navUrl === $currentPage
         ? "bg-blue-600 text-white"
         : "text-slate-300 hover:bg-slate-800 hover:text-white";
 }
@@ -22,10 +22,10 @@ function navClass(string $page, string $currentPage): string {
           "run_scraping.php" => "Jalankan Scraping",
           "scraping_logs.php" => "Log Scraping",
         ];
-        foreach ($items as $page => $label):
+        foreach ($items as $navUrl => $label):
         ?>
-          <a href="<?= $page ?>" class="rounded-lg px-3 py-2 <?= navClass($page, $currentPage) ?>">
-            <?= $label ?>
+          <a href="<?= htmlspecialchars($navUrl) ?>" class="rounded-lg px-3 py-2 <?= navClass($navUrl, $currentPage) ?>">
+            <?= htmlspecialchars($label) ?>
           </a>
         <?php endforeach; ?>
         <a href="logout.php" class="rounded-lg bg-red-600 px-3 py-2 font-semibold hover:bg-red-700">Logout</a>

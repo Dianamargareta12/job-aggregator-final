@@ -60,12 +60,12 @@ function renderPagination(int $current, int $total): string
         return "";
     }
 
-    $base    = "rounded border px-3 py-2 text-sm";
-    $normal  = "{$base} hover:bg-slate-100";
-    $active  = "{$base} bg-blue-600 font-semibold text-white";
+    $base     = "rounded border px-3 py-2 text-sm";
+    $normal   = "{$base} hover:bg-slate-100";
+    $active   = "{$base} bg-blue-600 font-semibold text-white";
     $disabled = "{$base} cursor-not-allowed text-slate-300";
 
-    $html  = '<div class="flex flex-wrap items-center justify-center gap-2 border-t px-5 py-4">';
+    $html = '<div class="flex flex-wrap items-center justify-center gap-2 border-t px-5 py-4">';
 
     // Tombol Previous
     if ($current > 1) {
@@ -128,12 +128,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["delete_id"])) {
 }
 
 // Ambil parameter filter dan halaman dari query string.
+// Catatan: pakai $pageNum (bukan $page) agar tidak bentrok dengan
+// variabel $page yang dipakai di dalam navbar.php.
 $search    = trim($_GET["search"] ?? "");
 $portal    = trim($_GET["portal"] ?? "");
 $education = trim($_GET["education"] ?? "");
-$page      = max(1, (int)($_GET["page"] ?? 1));
+$pageNum   = max(1, (int)($_GET["page"] ?? 1));
 $limit     = 15;
-$offset    = ($page - 1) * $limit;
+$offset    = ($pageNum - 1) * $limit;
 
 // Bangun kondisi WHERE secara dinamis sesuai filter yang aktif.
 $where  = [];
@@ -227,7 +229,7 @@ $jobs = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
   <div class="overflow-visible rounded-xl bg-white shadow-sm">
     <div class="flex justify-between border-b px-5 py-4">
       <strong>Total: <?= number_format($totalRows, 0, ",", ".") ?></strong>
-      <span class="text-sm text-slate-500">Halaman <?= $page ?> / <?= $totalPages ?></span>
+      <span class="text-sm text-slate-500">Halaman <?= $pageNum ?> / <?= $totalPages ?></span>
     </div>
     <div class="overflow-x-auto">
       <table class="min-w-full text-left text-sm">
@@ -273,7 +275,7 @@ $jobs = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
       </table>
     </div>
 
-    <?= renderPagination($page, $totalPages) ?>
+    <?= renderPagination($pageNum, $totalPages) ?>
 
   </div>
 </main>
