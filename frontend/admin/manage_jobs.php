@@ -1,13 +1,116 @@
 <?php
 require_once __DIR__ . "/auth.php";
 
+/**
+ * Membuat URL halaman dengan mempertahankan parameter filter yang aktif
+ * (search, portal, education) dan hanya mengganti nilai yang diberikan.
+ */
+function pageUrl(array $changes = []): string
+{
+    return "?" . http_build_query(array_merge($_GET, $changes));
+}
+
+/**
+ * Membangun daftar item pagination bergaya GitHub.
+ *
+ * Mengembalikan array berisi angka halaman dan tanda "..." (ellipsis):
+ * - selalu menampilkan halaman pertama dan terakhir
+ * - menampilkan hingga 2 halaman di kiri & kanan halaman aktif
+ * - menyisipkan "..." bila ada halaman yang dilewati
+ *
+ * Contoh (halaman 5 dari 120): [1, "...", 3, 4, 5, 6, 7, "...", 120]
+ */
+function buildPaginationItems(int $current, int $total): array
+{
+    // Bila total halaman sedikit, tampilkan semua tanpa ellipsis.
+    if ($total <= 7) {
+        return range(1, $total);
+    }
+
+    $window = 2; // jumlah halaman di kiri & kanan halaman aktif
+    $start  = max(2, $current - $window);
+    $end    = min($total - 1, $current + $window);
+
+    $items = [1];
+
+    if ($start > 2) {
+        $items[] = "...";
+    }
+
+    for ($i = $start; $i <= $end; $i++) {
+        $items[] = $i;
+    }
+
+    if ($end < $total - 1) {
+        $items[] = "...";
+    }
+
+    $items[] = $total;
+
+    return $items;
+}
+
+/**
+ * Merender HTML pagination lengkap (tombol Previous, nomor halaman, Next).
+ * Tombol Previous/Next otomatis nonaktif di halaman pertama/terakhir.
+ */
+function renderPagination(int $current, int $total): string
+{
+    if ($total <= 1) {
+        return "";
+    }
+
+    $base    = "rounded border px-3 py-2 text-sm";
+    $normal  = "{$base} hover:bg-slate-100";
+    $active  = "{$base} bg-blue-600 font-semibold text-white";
+    $disabled = "{$base} cursor-not-allowed text-slate-300";
+
+    $html  = '<div class="flex flex-wrap items-center justify-center gap-2 border-t px-5 py-4">';
+
+    // Tombol Previous
+    if ($current > 1) {
+        $html .= '<a href="' . htmlspecialchars(pageUrl(["page" => $current - 1]))
+               . '" class="' . $normal . '" title="Sebelumnya">&laquo;</a>';
+    } else {
+        $html .= '<span class="' . $disabled . '">&laquo;</span>';
+    }
+
+    // Nomor halaman dan ellipsis
+    foreach (buildPaginationItems($current, $total) as $item) {
+        if ($item === "...") {
+            $html .= '<span class="px-2 text-slate-400">&hellip;</span>';
+            continue;
+        }
+
+        if ($item === $current) {
+            $html .= '<span class="' . $active . '">' . $item . '</span>';
+        } else {
+            $html .= '<a href="' . htmlspecialchars(pageUrl(["page" => $item]))
+                   . '" class="' . $normal . '">' . $item . '</a>';
+        }
+    }
+
+    // Tombol Next
+    if ($current < $total) {
+        $html .= '<a href="' . htmlspecialchars(pageUrl(["page" => $current + 1]))
+               . '" class="' . $normal . '" title="Berikutnya">&raquo;</a>';
+    } else {
+        $html .= '<span class="' . $disabled . '">&raquo;</span>';
+    }
+
+    $html .= '</div>';
+
+    return $html;
+}
+
 if (empty($_SESSION["csrf_token"])) {
     $_SESSION["csrf_token"] = bin2hex(random_bytes(32));
 }
 
-$message = "";
+$message      = "";
 $errorMessage = "";
 
+// Proses hapus lowongan (dengan proteksi CSRF).
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["delete_id"])) {
     if (!hash_equals($_SESSION["csrf_token"], $_POST["csrf_token"] ?? "")) {
         $errorMessage = "Permintaan tidak valid.";
@@ -24,16 +127,18 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["delete_id"])) {
     }
 }
 
-$search = trim($_GET["search"] ?? "");
-$portal = trim($_GET["portal"] ?? "");
+// Ambil parameter filter dan halaman dari query string.
+$search    = trim($_GET["search"] ?? "");
+$portal    = trim($_GET["portal"] ?? "");
 $education = trim($_GET["education"] ?? "");
-$page = max(1, (int)($_GET["page"] ?? 1));
-$limit = 15;
-$offset = ($page - 1) * $limit;
+$page      = max(1, (int)($_GET["page"] ?? 1));
+$limit     = 15;
+$offset    = ($page - 1) * $limit;
 
-$where = [];
+// Bangun kondisi WHERE secara dinamis sesuai filter yang aktif.
+$where  = [];
 $params = [];
-$types = "";
+$types  = "";
 
 if ($search !== "") {
     $where[] = "(judul_posisi LIKE ? OR nama_perusahaan LIKE ? OR lokasi LIKE ?)";
@@ -42,41 +147,41 @@ if ($search !== "") {
     $types .= "sss";
 }
 if ($portal !== "") {
-    $where[] = "portal_sumber = ?";
+    $where[]  = "portal_sumber = ?";
     $params[] = $portal;
-    $types .= "s";
+    $types   .= "s";
 }
 if ($education !== "") {
-    $where[] = "pendidikan = ?";
+    $where[]  = "pendidikan = ?";
     $params[] = $education;
-    $types .= "s";
+    $types   .= "s";
 }
 
 $whereSql = $where ? " WHERE " . implode(" AND ", $where) : "";
 
+// Hitung total data untuk menentukan jumlah halaman.
 $countStmt = $conn->prepare("SELECT COUNT(*) AS total FROM jobs{$whereSql}");
-if ($types !== "") $countStmt->bind_param($types, ...$params);
+if ($types !== "") {
+    $countStmt->bind_param($types, ...$params);
+}
 $countStmt->execute();
-$totalRows = (int)($countStmt->get_result()->fetch_assoc()["total"] ?? 0);
+$totalRows  = (int)($countStmt->get_result()->fetch_assoc()["total"] ?? 0);
 $totalPages = max(1, (int)ceil($totalRows / $limit));
 
+// Ambil data lowongan untuk halaman aktif.
 $sql = "SELECT id, judul_posisi, nama_perusahaan, lokasi, pendidikan,
                portal_sumber, link_lowongan
         FROM jobs {$whereSql}
         ORDER BY id DESC LIMIT ? OFFSET ?";
-$dataParams = $params;
+$dataParams   = $params;
 $dataParams[] = $limit;
 $dataParams[] = $offset;
-$dataTypes = $types . "ii";
+$dataTypes    = $types . "ii";
 
 $stmt = $conn->prepare($sql);
 $stmt->bind_param($dataTypes, ...$dataParams);
 $stmt->execute();
 $jobs = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-
-function pageUrl(array $changes = []): string {
-    return "?" . http_build_query(array_merge($_GET, $changes));
-}
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -103,14 +208,14 @@ function pageUrl(array $changes = []): string {
     <input name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Cari judul, perusahaan, lokasi..." class="rounded-lg border px-4 py-2">
     <select name="portal" class="rounded-lg border px-4 py-2">
       <option value="">Semua portal</option>
-      <?php foreach (["Glints","Jobstreet","Loker.id"] as $item): ?>
-        <option value="<?= $item ?>" <?= $portal === $item ? "selected" : "" ?>><?= $item ?></option>
+      <?php foreach (["Glints", "Jobstreet", "Loker.id"] as $item): ?>
+        <option value="<?= htmlspecialchars($item) ?>" <?= $portal === $item ? "selected" : "" ?>><?= htmlspecialchars($item) ?></option>
       <?php endforeach; ?>
     </select>
     <select name="education" class="rounded-lg border px-4 py-2">
       <option value="">Semua pendidikan</option>
-      <?php foreach (["SMA","SMK","D3","S1"] as $item): ?>
-        <option value="<?= $item ?>" <?= $education === $item ? "selected" : "" ?>><?= $item ?></option>
+      <?php foreach (["SMA", "SMK", "D3", "S1"] as $item): ?>
+        <option value="<?= htmlspecialchars($item) ?>" <?= $education === $item ? "selected" : "" ?>><?= htmlspecialchars($item) ?></option>
       <?php endforeach; ?>
     </select>
     <div class="flex gap-2">
@@ -168,80 +273,7 @@ function pageUrl(array $changes = []): string {
       </table>
     </div>
 
-    <?php if ($totalPages > 1): ?>
-      <?php
-        $curr = (int)$page;
-        $last = (int)$totalPages;
-
-        // Tampilkan 2 halaman di kiri & kanan halaman aktif
-        $window = 5;
-
-// awal dan akhir window
-$start = $curr - floor($window / 2);
-$end   = $curr + floor($window / 2);
-
-// jika terlalu kiri
-if ($start < 1) {
-    $end += (1 - $start);
-    $start = 1;
-}
-
-// jika masih berada di 5 halaman pertama
-if ($curr <= 5) {
-    $start = 1;
-    $end = min($window, $last);
-}
-
-// jika sudah mendekati halaman terakhir
-if ($curr >= $last - 4) {
-    $end = $last;
-    $start = max(1, $last - 4);
-}
-
-// jika terlalu kanan
-if ($end > $last) {
-    $start -= ($end - $last);
-    $end = $last;
-}
-
-if ($start < 1) {
-    $start = 1;
-}
-      ?>
-      <div class="flex flex-wrap items-center justify-center gap-2 border-t px-5 py-4">
-
-        <?php if ($curr > 1): ?>
-          <a href="<?= htmlspecialchars(pageUrl(["page"=>$curr-1])) ?>" class="rounded border px-3 py-2 hover:bg-slate-100" title="Sebelumnya">&laquo;</a>
-        <?php endif; ?>
-
-        <?php if ($start > 1): ?>
-          <a href="<?= htmlspecialchars(pageUrl(["page"=>1])) ?>" class="rounded border px-3 py-2 hover:bg-slate-100">1</a>
-          <?php if ($start > 2): ?>
-            <span class="px-2 text-slate-400">…</span>
-          <?php endif; ?>
-        <?php endif; ?>
-
-        <?php for ($i = $start; $i <= $end; $i++): ?>
-          <?php if ($i == $curr): ?>
-            <span class="rounded bg-blue-600 px-3 py-2 font-semibold text-white"><?= $i ?></span>
-          <?php else: ?>
-            <a href="<?= htmlspecialchars(pageUrl(["page"=>$i])) ?>" class="rounded border px-3 py-2 hover:bg-slate-100"><?= $i ?></a>
-          <?php endif; ?>
-        <?php endfor; ?>
-
-        <?php if ($end < $last): ?>
-          <?php if ($end < $last - 1): ?>
-            <span class="px-2 text-slate-400">…</span>
-          <?php endif; ?>
-          <a href="<?= htmlspecialchars(pageUrl(["page"=>$last])) ?>" class="rounded border px-3 py-2 hover:bg-slate-100"><?= $last ?></a>
-        <?php endif; ?>
-
-        <?php if ($curr < $last): ?>
-          <a href="<?= htmlspecialchars(pageUrl(["page"=>$curr+1])) ?>" class="rounded border px-3 py-2 hover:bg-slate-100" title="Berikutnya">&raquo;</a>
-        <?php endif; ?>
-
-      </div>
-    <?php endif; ?>
+    <?= renderPagination($page, $totalPages) ?>
 
   </div>
 </main>
