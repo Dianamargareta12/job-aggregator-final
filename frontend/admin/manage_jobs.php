@@ -174,17 +174,27 @@ function pageUrl(array $changes = []): string {
         $last = (int)$totalPages;
 
         // Tampilkan 2 halaman di kiri & kanan halaman aktif
-        $start = max(1, $curr - 2);
-        $end   = min($last, $curr + 2);
+        $window = 5;
 
-        // Pastikan tetap tampil hingga 5 nomor halaman kalau memungkinkan
-        if ($end - $start < 4) {
-            if ($start == 1) {
-                $end = min($last, $start + 4);
-            } elseif ($end == $last) {
-                $start = max(1, $end - 4);
-            }
-        }
+// awal dan akhir window
+$start = $curr - floor($window / 2);
+$end   = $curr + floor($window / 2);
+
+// jika terlalu kiri
+if ($start < 1) {
+    $end += (1 - $start);
+    $start = 1;
+}
+
+// jika terlalu kanan
+if ($end > $last) {
+    $start -= ($end - $last);
+    $end = $last;
+}
+
+if ($start < 1) {
+    $start = 1;
+}
       ?>
       <div class="flex flex-wrap items-center justify-center gap-2 border-t px-5 py-4">
 
